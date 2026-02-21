@@ -1,5 +1,6 @@
 import os
 import logging
+import sqlite3
 import random
 import html
 from threading import Thread
@@ -9,65 +10,90 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 from telegram.constants import ParseMode
 
-# 1. الإعدادات وسجلات المراقبة
+# 1. إعداد السجلات (Logs)
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 TOKEN = os.environ.get('BOT_TOKEN')
-# ضع رابط المونجو دي بي الخاص بك هنا أو في Environment Variables
-ADMIN_ID = 7271805464 # ضع معرفك الرقمي هنا
+ADMIN_ID = 7271805464  # معرفك الرقمي
+
+# 2. إعداد قاعدة البيانات المحلية SQLite
+DB_FILE = "users_data.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY)')
+    conn.commit()
+    conn.close()
 
 def add_user(user_id):
-    if not users_col.find_one({"user_id": user_id}):
-        users_col.insert_one({"user_id": user_id})
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
+    conn.commit()
+    conn.close()
 
-# 3. سيرفر الـ Keep-Alive لإبقاء البوت مستيقظاً
+def get_users_count():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) FROM users')
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count
+
+def get_all_users():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('SELECT user_id FROM users')
+    users = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return users
+
+# تشغيل تهيئة القاعدة
+init_db()
+
+# 3. سيرفر الـ Keep-Alive
 flask_app = Flask('')
 @flask_app.route('/')
-def home(): return "Bot is Running!"
+def home(): return "Bot is Online!"
 
-def run_flask(): flask_app.run(host='0.0.0.0', port=8080)
+def run_flask(): 
+    flask_app.run(host='0.0.0.0', port=8080)
 
 def keep_alive():
     t = Thread(target=run_flask)
     t.start()
 
-# 4. محرك الزخرفة الإسلامية والفنية
+# 4. محرك الزخرفة الإسلامية
 def get_islamic_styles(text):
     text = html.escape(text)
     tashkeel = ['َ', 'ُ', 'ِ', 'ْ', 'ّ', 'ً', 'ٌ', 'ٍ', 'ٰ']
-    quranic_marks = ['ۗ', 'ۚ', 'ۘ', 'ۙ', 'ۜ', '۟', '۠', '۞']
-    
-    def decorate(t, density=0.5):
+    def decorate(t):
         res = ""
         for char in t:
             res += char
-            if char != ' ':
-                if random.random() < density: res += random.choice(tashkeel)
-                if random.random() < 0.15: res += random.choice(quranic_marks)
+            if char != ' ' and random.random() < 0.4: res += random.choice(tashkeel)
         return res
-
     return {
-        'i1': f"۞ {decorate(text, 0.6)} ۞",
+        'i1': f"۞ {decorate(text)} ۞",
         'i2': f"꧁ {text} ꧂",
-        'i3': f"☾ {decorate(text, 0.4)} ☽",
-        'i4': f"◈ {text.replace(' ', ' ◈ ')} ◈",
-        'i5': f"✨ {decorate(text, 0.7)} ✨",
-        'i6': f"【 {text} 】"
+        'i3': f"☾ {decorate(text)} ☽",
+        'i4': f"◈ {text.replace(' ', ' ◈ ')} ◈"
     }
 
-# 5. الأوامر البرمجية
+# 5. معالجة الأوامر
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     add_user(update.effective_user.id)
     await update.message.reply_text(
-        "<b>أهلاً بك في نسخة 'حبر الأمة' الاحترافية 🖋️💎</b>\n\n"
-        "أرسل الاسم أو النص المراد زخرفته بنقوش إسلامية وفنية.",
+        "<b>مرحباً بك في بوت زخرفة حبر الأمة 🖋️💎</b>\n\n"
+        "أرسل الاسم أو النص الآن لزخرفته فوراً.",
         parse_mode=ParseMode.HTML
     )
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID: return
-    count = users_col.count_documents({})
-    await update.message.reply_text(f"📊 إجمالي عدد المشتركين الدائمين: <b>{count}</b>", parse_mode=ParseMode.HTML)
+    count = get_users_count()
+    await update.message.reply_text(f"📊 عدد المشتركين الحاليين: <b>{count}</b>", parse_mode=ParseMode.HTML)
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID: return
@@ -75,54 +101,43 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not msg:
         await update.message.reply_text("❌ اكتب الرسالة بعد الأمر.")
         return
-    
-    users = users_col.find()
+    users = get_all_users()
     s, f = 0, 0
-    for user in users:
+    for u_id in users:
         try:
-            await context.bot.send_message(chat_id=user['user_id'], text=msg)
+            await context.bot.send_message(chat_id=u_id, text=msg)
             s += 1
         except: f += 1
-    await update.message.reply_text(f"✅ تم بنجاح: {s}\n❌ فشل (حظر): {f}")
+    await update.message.reply_text(f"✅ تم الإرسال لـ: {s}\n❌ فشل لـ: {f}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     add_user(update.effective_user.id)
     text = araby.strip_tashkeel(update.message.text)
-    context.user_data['t'] = text
-    
+    context.user_data['active_text'] = text
     keyboard = [
         [InlineKeyboardButton("نقش إسلامي ۞", callback_data='i1'), InlineKeyboardButton("زخرفة نباتية ꧁", callback_data='i2')],
         [InlineKeyboardButton("نمط الهلال ☾", callback_data='i3'), InlineKeyboardButton("مخطوطة هندسية ◈", callback_data='i4')],
-        [InlineKeyboardButton("تشكيل مكثف ✨", callback_data='i5'), InlineKeyboardButton("إطار فخم 【】", callback_data='i6')],
     ]
-    await update.message.reply_text("اختر النمط الفاخر:", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text("اختر نمط الزخرفة:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    
-    text = context.user_data.get('t', "حبر الأمة")
-    styles = get_islamic_styles(text)
-    result = styles.get(query.data, text)
-    
-    await query.edit_message_text(
-        text=f"✅ <b>تمت الزخرفة بنجاح:</b>\n\n<code>{result}</code>\n\nاضغط على النص للنسخ.",
-        parse_mode=ParseMode.HTML
-    )
+    styles = get_islamic_styles(context.user_data.get('active_text', "حبر الأمة"))
+    result = styles.get(query.data, "خطأ في المعالجة")
+    await query.edit_message_text(f"✅ <b>النتيجة:</b>\n\n<code>{result}</code>", parse_mode=ParseMode.HTML)
 
 # 6. التشغيل
 if __name__ == '__main__':
-    keep_alive() # تشغيل السيرفر الموازي للـ Keep-Alive
-    app = ApplicationBuilder().token(TOKEN).build()
-    
-    app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('stats', stats))
-    app.add_handler(CommandHandler('broadcast', broadcast))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    app.add_handler(CallbackQueryHandler(callback_handler))
-    
-    app.run_polling()
-
-
-
-
+    keep_alive()
+    if not TOKEN:
+        logging.error("❌ BOT_TOKEN missing in Render settings!")
+    else:
+        app = ApplicationBuilder().token(TOKEN).build()
+        app.add_handler(CommandHandler('start', start))
+        app.add_handler(CommandHandler('stats', stats))
+        app.add_handler(CommandHandler('broadcast', broadcast))
+        app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+        app.add_handler(CallbackQueryHandler(callback_handler))
+        logging.info("🚀 البوت يعمل بنظام SQLite السهل...")
+        app.run_polling()
