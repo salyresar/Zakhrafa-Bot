@@ -15,7 +15,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 
 TOKEN = os.environ.get('BOT_TOKEN')
 # ضع رابط المونجو دي بي الخاص بك هنا أو في Environment Variables
-MONGO_URI = os.environ.get('MONGO_URI', 'mongodb+srv://salyresar_db_user:<db_password>@cluster0.z5vq5hg.mongodb.net/?appName=Cluster0')
+MONGO_URI = os.environ.get('MONGO_URI')
 ADMIN_ID = 7271805464 # ضع معرفك الرقمي هنا
 
 # 2. الاتصال بقاعدة بيانات MongoDB
@@ -129,3 +129,4 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(callback_handler))
     
     app.run_polling()
+
