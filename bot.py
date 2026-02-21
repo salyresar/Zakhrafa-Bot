@@ -5,7 +5,6 @@ import html
 from threading import Thread
 from flask import Flask
 import pyarabic.araby as araby
-from pymongo import MongoClient
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 from telegram.constants import ParseMode
@@ -15,13 +14,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 
 TOKEN = os.environ.get('BOT_TOKEN')
 # ضع رابط المونجو دي بي الخاص بك هنا أو في Environment Variables
-MONGO_URI = os.environ.get('MONGO_URI')
 ADMIN_ID = 7271805464 # ضع معرفك الرقمي هنا
-
-# 2. الاتصال بقاعدة بيانات MongoDB
-client = MongoClient(MONGO_URI)
-db = client['sample_mflix']
-users_col = db['users']
 
 def add_user(user_id):
     if not users_col.find_one({"user_id": user_id}):
@@ -129,6 +122,7 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(callback_handler))
     
     app.run_polling()
+
 
 
 
