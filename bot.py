@@ -20,7 +20,7 @@ ADMIN_ID = 7271805464 # ضع معرفك الرقمي هنا
 
 # 2. الاتصال بقاعدة بيانات MongoDB
 client = MongoClient(MONGO_URI)
-db = client['zakhrafa_db']
+db = client['salyresar']
 users_col = db['users']
 
 def add_user(user_id):
@@ -129,4 +129,5 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(callback_handler))
     
     app.run_polling()
+
 
