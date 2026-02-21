@@ -1,38 +1,26 @@
 import os
 import logging
 import random
-import html
-import sqlite3 # لإدارة قاعدة البيانات
+import html  # المكتبة القياسية لتأمين النصوص
 import pyarabic.araby as araby
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 from telegram.constants import ParseMode
 
-# 1. الإعدادات الأساسية
+# 1. إعداد السجلات (للمراقبة في Render Logs)
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 TOKEN = os.environ.get('BOT_TOKEN')
-ADMIN_ID = 7271805464  # !!! استبدل هذا الرقم بـ ID حسابك على تلجرام !!!
 
-# 2. إعداد قاعدة البيانات
-db_conn = sqlite3.connect('bot_users.db', check_same_thread=False)
-cursor = db_conn.cursor()
-cursor.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY)')
-db_conn.commit()
-
-def add_user(user_id):
-    cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
-    db_conn.commit()
-
-def get_all_users():
-    cursor.execute('SELECT user_id FROM users')
-    return [row[0] for row in cursor.fetchall()]
-
-# 3. دوال الزخرفة (نفس النسخة المستقرة السابقة)
+# 2. دوال الزخرفة والتشكيل
 def get_artistic_styles(text):
+    """توليد أنماط زخرفة متنوعة معالجة برمجياً"""
+    # تنظيف النص من أي وسوم HTML قد يدخلها المستخدم للتخريب
     text = html.escape(text)
+    
+    # أنماط التشكيل والنقوش
     tashkeel = ['َ', 'ُ', 'ِ', 'ْ', 'ّ', 'ً', 'ٌ', 'ٍ', 'ٰ']
-    quranic = ['ۗ', 'ۚ', 'ۘ', 'ۙ', 'ۜ', '۟', '۠']
+    quranic = ['ۗ', 'ۚ', 'ۘ', 'ۙ', 'ۜ', '۟', '۠', '۞']
     
     def apply_marks(t):
         res = ""
@@ -43,66 +31,48 @@ def get_artistic_styles(text):
                 if random.random() > 0.8: res += random.choice(quranic)
         return res
 
+    kashida = text.replace(' ', 'ــــــــ')
+    artistic_text = apply_marks(text)
+
     return {
-        's1': f"★ {text.replace(' ', 'ــــــــ')} ★",
+        's1': f"★ {kashida} ★",
         's2': f"『 {text} 』",
         's3': f"♛ {text} ♛",
-        's4': f"✨ {apply_marks(text)} ✨",
-        's5': f"꧁ {text} ꧂",
-        's6': f"◈ {apply_marks(text)} ◈"
+        's4': f"【 {text} 】",
+        's5': f"✨ {artistic_text} ✨",
+        's6': f"꧁ {text} ꧂",
+        's7': f"◈ {artistic_text} ◈",
+        's8': f"☾ {text} ☽"
     }
 
-# 4. الأوامر البرمجية
+# 3. معالجات الأوامر
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    add_user(update.effective_user.id) # إضافة المستخدم للقاعدة
     await update.message.reply_text(
         "<b>مرحباً بك في بوت زخرفة حبر الأمة المطوّر 🖋️</b>\n\n"
-        "أرسل الاسم الذي تريد زخرفته الآن.",
+        "أرسل الاسم الذي تريد زخرفته الآن وسأقوم بالواجب.",
         parse_mode=ParseMode.HTML
     )
 
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """عرض عدد الأعضاء (للمطور فقط)"""
-    if update.effective_user.id != ADMIN_ID:
-        return
-    count = len(get_all_users())
-    await update.message.reply_text(f"📊 عدد مستخدمي البوت حالياً: <b>{count}</b>", parse_mode=ParseMode.HTML)
-
-async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """إرسال رسالة للجميع (للمطور فقط)"""
-    if update.effective_user.id != ADMIN_ID:
-        return
-    
-    msg_to_send = " ".join(context.args)
-    if not msg_to_send:
-        await update.message.reply_text("❌ يرجى كتابة الرسالة بعد الأمر. مثال:\n`/broadcast أهلاً بالجميع`", parse_mode=ParseMode.HTML)
-        return
-
-    users = get_all_users()
-    success, fail = 0, 0
-    
-    for user_id in users:
-        try:
-            await context.bot.send_message(chat_id=user_id, text=msg_to_send)
-            success += 1
-        except:
-            fail += 1
-    
-    await update.message.reply_text(f"✅ تم الإرسال إلى: {success}\n❌ فشل الإرسال إلى: {fail} (قاموا بحظر البوت)")
-
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    add_user(update.effective_user.id) # تأكيد وجوده في القاعدة
-    user_input = araby.strip_tashkeel(update.message.text)
-    context.user_data['active_text'] = user_input
+    user_input = update.message.text
+    if len(user_input) > 60:
+        await update.message.reply_text("⚠️ النص طويل جداً، أرسل نصاً قصيراً (أقل من 60 حرفاً).")
+        return
+
+    # تنظيف النص وتخزينه
+    clean_text = araby.strip_tashkeel(user_input)
+    context.user_data['active_text'] = clean_text
 
     keyboard = [
         [InlineKeyboardButton("كشيدة ــــ", callback_data='s1'), InlineKeyboardButton("أقواس 『』", callback_data='s2')],
-        [InlineKeyboardButton("تاج ملكي ♛", callback_data='s3'), InlineKeyboardButton("تشكيل فني ✨", callback_data='s4')],
-        [InlineKeyboardButton("نباتي ꧁꧂", callback_data='s5'), InlineKeyboardButton("مخطوطة ◈", callback_data='s6')],
+        [InlineKeyboardButton("تاج ملكي ♛", callback_data='s3'), InlineKeyboardButton("إطار عريض 【】", callback_data='s4')],
+        [InlineKeyboardButton("تشكيل فني ✨", callback_data='s5'), InlineKeyboardButton("نباتي ꧁꧂", callback_data='s6')],
+        [InlineKeyboardButton("مخطوطة ◈", callback_data='s7'), InlineKeyboardButton("هلالي ☾☽", callback_data='s8')],
     ]
     
     await update.message.reply_text(
-        f"<b>📝 النص:</b> {html.escape(user_input)}\n<i>اختر النمط:</i>",
+        f"<b>📝 النص المستلم:</b> {html.escape(clean_text)}\n"
+        f"<i>اختر النمط المطلوب:</i>",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode=ParseMode.HTML
     )
@@ -110,23 +80,44 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    text = context.user_data.get('active_text', "حبر الأمة")
+
+    # جلب النص من الذاكرة أو من الرسالة نفسها في حال إعادة تشغيل البوت
+    text = context.user_data.get('active_text')
+    if not text:
+        try:
+            # استخراج النص برمجياً من رسالة البوت السابقة
+            text = query.message.text.split('\n')[0].replace('📝 النص المستلم: ', '')
+        except:
+            text = "حبر الأمة"
+
     styles = get_artistic_styles(text)
     decorated = styles.get(query.data, text)
 
-    await query.edit_message_text(
-        text=f"<b>✅ تمت الزخرفة</b>\n\n<code>{decorated}</code>",
-        parse_mode=ParseMode.HTML
+    # التنسيق النهائي باستخدام HTML
+    # كود <code> يتيح النسخ عند اللمس في تلجرام
+    response_html = (
+        f"<b>✅ تمت الزخرفة بنجاح</b>\n\n"
+        f"اضغط على النص أدناه للنسخ:\n"
+        f"<code>{decorated}</code>"
     )
 
-# 5. تشغيل البوت
+    try:
+        await query.edit_message_text(text=response_html, parse_mode=ParseMode.HTML)
+    except Exception as e:
+        logging.error(f"Error in editing: {e}")
+        # في حال فشل التعديل، نرسل النتيجة في رسالة جديدة
+        await query.message.reply_text(f"إليك النتيجة:\n<code>{decorated}</code>", parse_mode=ParseMode.HTML)
+
+# 4. تشغيل البوت
 if __name__ == '__main__':
-    app = ApplicationBuilder().token(TOKEN).build()
-    
-    app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('stats', stats))
-    app.add_handler(CommandHandler('broadcast', broadcast))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text))
-    app.add_handler(CallbackQueryHandler(handle_callback))
-    
-    app.run_polling()
+    if not TOKEN:
+        print("❌ خطأ: لم يتم ضبط BOT_TOKEN في إعدادات البيئة (Variables)!")
+    else:
+        app = ApplicationBuilder().token(TOKEN).build()
+        
+        app.add_handler(CommandHandler('start', start))
+        app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text))
+        app.add_handler(CallbackQueryHandler(handle_callback))
+        
+        print("🚀 البوت يعمل الآن بنظام HTML المستقر...")
+        app.run_polling()
