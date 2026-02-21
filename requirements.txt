@@ -1,2 +1,5 @@
 python-telegram-bot
+pymongo
+dnspython
 pyarabic
+flask
