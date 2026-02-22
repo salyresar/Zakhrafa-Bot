@@ -70,9 +70,10 @@ def get_all_styles(text):
 # --- الأوامر الجديدة (الإذاعة والإحصائيات) ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    add_user(update.effective_user.id) # حفظ المستخدم عند الضغط على start
-    await update.message.reply_text("<b>مرحباً بك في بوت زخرفة حبر الأمة 🖋️</b>\nأرسل النص الآن.", parse_mode=ParseMode.HTML)
-
+    await update.message.reply_text(
+        "<b>مرحباً بك في بوت زخرفة حبر الأمة 🖋️💎</b>\n\n"
+        "أرسل الاسم أو النص الذي تريد زخرفته الآن.",
+        parse_mode=ParseMode.HTML
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID: return
     users = get_all_users()
@@ -129,3 +130,4 @@ if __name__ == '__main__':
         app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
         app.add_handler(CallbackQueryHandler(callback_handler))
         app.run_polling()
+
